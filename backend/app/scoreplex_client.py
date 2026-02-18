@@ -5,7 +5,7 @@ from app.config import settings
 
 
 def _normalize_phone_for_api(phone: str) -> str:
-    """Normalize phone for API: 91 + 10 digits (India). Same logic as Flask so Scoreplex returns IN/India, correct carrier."""
+    """Normalize phone for API: exactly 91 + 10 digits (India). Scoreplex uses this to return IN/India and correct carrier (e.g. JIO)."""
     if not phone and phone != 0:
         return str(phone) if phone == 0 else ""
     if isinstance(phone, float):
@@ -22,15 +22,24 @@ def _normalize_phone_for_api(phone: str) -> str:
     digits = "".join(c for c in phone_clean if c.isdigit())
     if not digits:
         return phone_clean
+    # Always produce exactly 12 digits: 91 (India) + 10-digit number
     if digits.startswith("91"):
         if len(digits) == 12:
             return digits
+        if len(digits) == 11:
+            # 91 + 9 digits -> pad to 91 + 10
+            return "91" + digits[2:].zfill(10)
         if len(digits) == 10:
+            # "91" is first 2 of 10-digit number, add country code
             return "91" + digits
-        if len(digits) < 12:
-            return "91" + digits
-        return digits[:12]
-    return "91" + digits
+        if len(digits) > 12:
+            return digits[:12]
+        # 9 or fewer digits after 91
+        return "91" + digits[2:].zfill(10) if len(digits) >= 2 else "91" + digits.zfill(10)
+    # No 91 prefix: add India country code; take last 10 digits if longer
+    if len(digits) > 10:
+        digits = digits[-10:]
+    return "91" + digits.zfill(10) if len(digits) <= 10 else "91" + digits
 
 
 class ScoreplexClient:
@@ -52,14 +61,18 @@ class ScoreplexClient:
                 "phone": normalized_phone,
                 "mobile_number": normalized_phone,
                 "mobileNumber": normalized_phone,
+                "country_code": "91",
+                "countryCode": "91",
             }
             if ip:
                 payload["ip"] = ip
-            # Match Flask: Bearer auth for POST; report=false in query
-            headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+            if normalized_phone:
+                print(f"📱 Phone sent to API: {normalized_phone} (len={len(normalized_phone)}, expect 12 for India)")
+            # Auth: try API-Key header (same as GET); some Scoreplex setups use this for POST too
+            headers = {"API-Key": self.api_key, "Content-Type": "application/json"}
             response = await self.client.post(
                 f"{self.base_url}/search",
-                params={"report": "false"},
+                params={"api_key": self.api_key, "report": "false"},
                 headers=headers,
                 json=payload
             )

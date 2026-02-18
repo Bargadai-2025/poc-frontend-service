@@ -483,6 +483,15 @@ class ExcelHandler:
                 "no_frequent_abuse_history",
                 "noFrequentAbuseHistory",
             ),
+            "Phone_No_Reachability": (
+                "Phone_No_Reachability",
+                "phone_no_reachability",
+                "phoneNoReachability",
+                "no_reachability",
+                "noReachability",
+                "reachability",
+                "noreachability",
+            ),
             "phone_prepaid": ("phone_prepaid", "phonePrepaid"),
             "phone_risky": ("phone_risky", "phoneRisky"),
             "phone_recent_abuse": (
