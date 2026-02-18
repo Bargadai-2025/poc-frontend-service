@@ -1,8 +1,6 @@
 from fastapi import FastAPI, File, UploadFile, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
-import os
-import uuid
 from app.processor import BulkProcessor
 
 app = FastAPI(title="Fraud Detection Bulk Processor")
@@ -22,71 +20,48 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Create folders
-os.makedirs("uploads", exist_ok=True)
-os.makedirs("outputs", exist_ok=True)
 
 @app.get("/")
 def root():
     return {"message": "Fraud Detection API - Ready"}
 
+
 @app.post("/api/process-excel")
 async def process_excel(file: UploadFile = File(...)):
     """
-    Upload Excel → Process → Return result Excel
-    
-    5 input rows = 5 API calls = 5 output rows
-    NO WASTE - NO LOOPS
+    Upload Excel → Process in memory → Return result Excel (no files stored).
     """
     if not file.filename.endswith(('.xlsx', '.xls')):
         raise HTTPException(400, "Only Excel files allowed (.xlsx, .xls)")
-    
-    # Generate unique filenames
-    job_id = str(uuid.uuid4())[:8]
-    input_path = f"uploads/input_{job_id}.xlsx"
-    output_path = f"outputs/output_{job_id}.xlsx"
-    
+
     try:
-        # Save uploaded file
-        with open(input_path, "wb") as f:
-            content = await file.read()
-            f.write(content)
-        
-        print(f"\n📁 File uploaded: {file.filename}")
-        print(f"🆔 Job ID: {job_id}\n")
-        
-        # Process
-        processor = BulkProcessor()  # uses BATCH_SIZE from config (default 30)
-        summary = await processor.process_bulk(input_path, output_path)
-        
-        # Return file download link
-        return {
-            "job_id": job_id,
-            "summary": summary,
-            "download_url": f"/api/download/{job_id}"
-        }
-        
+        content = await file.read()
+        print(f"\n📁 File received in memory: {file.filename}\n")
+
+        processor = BulkProcessor()
+        summary, output_bytes = await processor.process_bulk(content)
+
+        # Suggest filename for download (no file saved on server)
+        result_filename = "fraud_detection_result.xlsx"
+        if file.filename:
+            base = file.filename.rsplit(".", 1)[0]
+            result_filename = f"{base}_result.xlsx"
+
+        return Response(
+            content=output_bytes,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={
+                "Content-Disposition": f'attachment; filename="{result_filename}"',
+                "X-Total-Rows": str(summary["total_rows"]),
+                "X-Success-Count": str(summary["success"]),
+                "X-Incomplete-Count": str(summary["incomplete"]),
+                "X-Failed-Count": str(summary["failed"]),
+                "Access-Control-Expose-Headers": "X-Total-Rows, X-Success-Count, X-Incomplete-Count, X-Failed-Count, Content-Disposition",
+            },
+        )
     except Exception as e:
         print(f"❌ Error: {str(e)}")
         raise HTTPException(500, f"Processing failed: {str(e)}")
-    finally:
-        # Cleanup input file
-        if os.path.exists(input_path):
-            os.remove(input_path)
-
-@app.get("/api/download/{job_id}")
-def download_result(job_id: str):
-    """Download processed Excel file"""
-    output_path = f"outputs/output_{job_id}.xlsx"
-    
-    if not os.path.exists(output_path):
-        raise HTTPException(404, "File not found")
-    
-    return FileResponse(
-        output_path,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        filename=f"fraud_detection_result_{job_id}.xlsx"
-    )
 
 if __name__ == "__main__":
     import uvicorn

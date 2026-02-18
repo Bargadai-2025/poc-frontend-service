@@ -1,4 +1,5 @@
 import json
+from io import BytesIO
 from openpyxl import load_workbook, Workbook
 from typing import List, Dict, Any
 
@@ -361,12 +362,12 @@ def _find_value_in_flat(flat: Dict[str, Any], sl_attr: str) -> Any:
 
 class ExcelHandler:
     @staticmethod
-    def read_input_excel(file_path: str) -> List[Dict[str, str]]:
+    def read_input_excel_from_bytes(content: bytes) -> List[Dict[str, str]]:
         """
-        Read input Excel with email and phone columns using openpyxl only.
+        Read input Excel from bytes (in-memory). Email and phone columns required.
         """
         try:
-            wb = load_workbook(file_path)
+            wb = load_workbook(BytesIO(content), read_only=False)
             ws = wb.active
             
             # Get headers from first row
@@ -517,10 +518,11 @@ class ExcelHandler:
         # Reverse pass: map raw Scoreplex keys to SL column when column still empty; prefer non-empty (do not fill with empty)
         _REACHABILITY_KEYS = (
             "no_reachability", "noreachability", "phone_reachability", "phone_no_reachability",
-            "phononoreachability", "reachability",
+            "phononoreachability", "phone_noreachability", "reachability",
         )
         for flat_key, flat_val in flat.items():
-            if _is_empty(flat_val):
+            # Include boolean False for reachability (API returns true/false)
+            if _is_empty(flat_val) and flat_val is not False and flat_val is not True:
                 continue
             snake = _camel_to_snake(flat_key)
             snake_alt = _normalize_flat_key(flat_key)
@@ -540,11 +542,11 @@ class ExcelHandler:
         # Final fallback: Phone_No_Reachability from any flat key containing "reachability" (Scoreplex returns true/false)
         if out.get("Phone_No_Reachability") in (None, ""):
             for k, v in flat.items():
-                if _is_empty(v):
+                if v is None or (isinstance(v, str) and v.strip() == ""):
                     continue
                 key_lower = (k or "").lower().replace("-", "_")
                 key_snake = _camel_to_snake(k).lower()
-                if "reachability" in key_lower or "reachability" in key_snake or "noreachability" in key_lower:
+                if "reachability" in key_lower or "reachability" in key_snake or "noreachability" in key_lower or "no_reachability" in key_snake:
                     out["Phone_No_Reachability"] = v
                     break
         # email_mx_record_count = count of MX records when not provided
@@ -637,4 +639,47 @@ class ExcelHandler:
             print(f"✅ Wrote {len(results)} rows to {output_path}")
         except Exception as e:
             print(f"❌ Error writing Excel: {str(e)}")
+            raise
+
+    @staticmethod
+    def write_output_excel_to_bytes(results: List[Dict[Any, Any]]) -> bytes:
+        """Build result Excel in memory and return as bytes (no file stored)."""
+        try:
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "Results"
+            columns = (
+                ["input_email", "input_phone", "task_id"]
+                + list(DATA_COLUMNS_ORDER)
+                + list(STATUS_COLUMNS_AT_END)
+            )
+            ws.append(columns)
+            for result in results:
+                submitted_email = result.get("email", "")
+                submitted_phone = _normalize_phone_91(result.get("phone", ""))
+                row_data = {
+                    "input_email": submitted_email,
+                    "input_phone": submitted_phone,
+                    "task_id": result.get("task_id", ""),
+                }
+                if result.get("status") in ("SUCCESS", "INCOMPLETE") and "raw_response" in result:
+                    row_data.update(ExcelHandler.flatten_response(result["raw_response"]))
+                row_data["input_email"] = submitted_email
+                row_data["input_phone"] = _normalize_phone_91(result.get("phone", ""))
+                for c in DATA_COLUMNS_ORDER:
+                    if c not in row_data:
+                        row_data[c] = ""
+                row_data["email_status"] = row_data.get("email_status", "")
+                row_data["phone_status"] = row_data.get("phone_status", "")
+                row_data["data_leak_status"] = row_data.get("data_leak_status", "")
+                row_data["status"] = result.get("status", "")
+                row_data["error"] = result.get("error", "")
+                row = [row_data.get(col, "") for col in columns]
+                ws.append(row)
+            buffer = BytesIO()
+            wb.save(buffer)
+            print(f"✅ Built result Excel in memory ({len(results)} rows)")
+            return buffer.getvalue()
+        except Exception as e:
+            print(f"❌ Error building Excel: {str(e)}")
             raise

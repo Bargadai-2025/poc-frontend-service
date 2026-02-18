@@ -1,5 +1,5 @@
 import asyncio
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
 from app.scoreplex_client import ScoreplexClient
 from app.excel_handler import ExcelHandler
 from app.config import settings
@@ -10,14 +10,14 @@ class BulkProcessor:
         self.excel_handler = ExcelHandler()
         self.batch_size = batch_size if batch_size is not None else settings.BATCH_SIZE
 
-    async def process_bulk(self, input_file: str, output_file: str) -> Dict[str, Any]:
+    async def process_bulk(self, input_content: bytes) -> Tuple[Dict[str, Any], bytes]:
         """
-        Process Excel with batching: reads all rows, processes in batches (max concurrent rows = batch size).
-        Default batch size 30 for reliable data; increase via BATCH_SIZE in .env if needed.
+        Process Excel from bytes (in-memory). Returns (summary, result_excel_bytes).
+        No files are stored on disk.
         """
         try:
-            # Step 1: Read input
-            rows = self.excel_handler.read_input_excel(input_file)
+            # Step 1: Read input from bytes
+            rows = self.excel_handler.read_input_excel_from_bytes(input_content)
             total_rows = len(rows)
             
             if total_rows == 0:
@@ -58,9 +58,9 @@ class BulkProcessor:
                 failed = sum(1 for r in batch_results if r.get("status") == "FAILED")
                 print(f"✅ Batch {current_batch} complete: {success} success, {incomplete} incomplete, {failed} failed\n")
             
-            # Step 3: Write output
-            print("📝 Writing results to Excel...")
-            self.excel_handler.write_output_excel(all_results, output_file)
+            # Step 3: Build output Excel in memory (no file saved)
+            print("📝 Building result Excel...")
+            output_bytes = self.excel_handler.write_output_excel_to_bytes(all_results)
             
             # Step 4: Summary
             success_count = sum(1 for r in all_results if r.get("status") == "SUCCESS")
@@ -72,7 +72,6 @@ class BulkProcessor:
                 "success": success_count,
                 "incomplete": incomplete_count,
                 "failed": failed_count,
-                "output_file": output_file
             }
             
             print(f"\n✅ Processing complete!")
@@ -81,7 +80,7 @@ class BulkProcessor:
             print(f"   Incomplete (timeout or pending): {incomplete_count}")
             print(f"   Failed: {failed_count}")
             
-            return summary
+            return summary, output_bytes
             
         except Exception as e:
             print(f"❌ Processing failed: {str(e)}")

@@ -61,21 +61,53 @@ function App() {
           headers: {
             'Content-Type': 'multipart/form-data',
           },
+          responseType: 'blob',
           timeout: 300000, // 5 minutes timeout
         }
       );
 
-      setResult(response.data);
+      // API returns the Excel file as body; summary is in headers (backend must send Access-Control-Expose-Headers for these)
+      const h = response.headers || {};
+      const getHeader = (name) => h[name] ?? h[name.toLowerCase()] ?? '';
+      const summary = {
+        total_rows: parseInt(getHeader('x-total-rows') || getHeader('X-Total-Rows') || '0', 10),
+        success: parseInt(getHeader('x-success-count') || getHeader('X-Success-Count') || '0', 10),
+        incomplete: parseInt(getHeader('x-incomplete-count') || getHeader('X-Incomplete-Count') || '0', 10),
+        failed: parseInt(getHeader('x-failed-count') || getHeader('X-Failed-Count') || '0', 10),
+      };
+      const resultFilename = (file?.name && file.name.endsWith('.xlsx'))
+        ? `${file.name.replace(/\.xlsx$/i, '')}_result.xlsx`
+        : 'fraud_detection_result.xlsx';
+      setResult({
+        summary,
+        resultBlob: response.data,
+        resultFilename,
+      });
       setUploading(false);
     } catch (err) {
-      setError(err.response?.data?.detail || 'Upload failed. Please try again.');
+      let message = 'Upload failed. Please try again.';
+      const data = err.response?.data;
+      if (data?.detail) message = typeof data.detail === 'string' ? data.detail : data.detail;
+      else if (data instanceof Blob) {
+        try {
+          const text = await data.text();
+          const parsed = JSON.parse(text);
+          if (parsed.detail) message = typeof parsed.detail === 'string' ? parsed.detail : parsed.detail;
+        } catch (_) {}
+      }
+      setError(message);
       setUploading(false);
     }
   };
 
   const handleDownload = () => {
-    if (result?.download_url) {
-      window.open(`http://127.0.0.1:8000${result.download_url}`, '_blank');
+    if (result?.resultBlob) {
+      const url = URL.createObjectURL(result.resultBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = result.resultFilename || 'fraud_detection_result.xlsx';
+      a.click();
+      URL.revokeObjectURL(url);
     }
   };
 
@@ -181,7 +213,7 @@ function App() {
             </div>
 
             <div className="job-info">
-              <p>Job ID: <code>{result.job_id}</code></p>
+              <p>Result file: <code>{result.resultFilename || 'fraud_detection_result.xlsx'}</code></p>
             </div>
           </div>
         )}
