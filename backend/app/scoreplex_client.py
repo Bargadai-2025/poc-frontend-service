@@ -175,6 +175,70 @@ class ScoreplexClient:
                     print(f"  ⚠️ Attempt {attempt}: No response from Scoreplex")
                 continue
             
+            # 🔍 DEBUG: Print raw response on first successful attempt
+            if attempt == 1:
+                import json
+                print(f"\n{'='*80}")
+                print(f"🔍 DEBUG: Searching for Phone_No_Reachability in API response")
+                print(f"{'='*80}")
+                
+                # Function to recursively search for keys containing "reach"
+                def find_keys(d, search_terms=["reach", "reachability"], path="", results=None):
+                    if results is None:
+                        results = []
+                    if not isinstance(d, dict):
+                        return results
+                    
+                    for k, v in d.items():
+                        current_path = f"{path}.{k}" if path else k
+                        
+                        # Check if key contains any search term
+                        k_lower = k.lower()
+                        for term in search_terms:
+                            if term in k_lower:
+                                results.append((current_path, k, v))
+                                print(f"   ✅ FOUND: {current_path} = {v}")
+                                break
+                        
+                        # Recurse into nested dicts
+                        if isinstance(v, dict):
+                            find_keys(v, search_terms, current_path, results)
+                    
+                    return results
+                
+                # Search for reachability
+                results = find_keys(response)
+                
+                if not results:
+                    print(f"   ❌ NO keys containing 'reach' or 'reachability' found!")
+                    print(f"\n   📋 All phone-related keys in response:")
+                    
+                    # Show all phone keys
+                    def find_phone_keys(d, path=""):
+                        phone_keys = []
+                        if not isinstance(d, dict):
+                            return phone_keys
+                        
+                        for k, v in d.items():
+                            current_path = f"{path}.{k}" if path else k
+                            k_lower = k.lower()
+                            
+                            if "phone" in k_lower or k_lower.startswith("phone_"):
+                                phone_keys.append((current_path, k, v))
+                                print(f"      {current_path} = {v}")
+                            
+                            if isinstance(v, dict):
+                                phone_keys.extend(find_phone_keys(v, current_path))
+                        
+                        return phone_keys
+                    
+                    find_phone_keys(response)
+                
+                # Print first 3000 chars of response
+                print(f"\n   📄 Full API response (first 3000 chars):")
+                print(json.dumps(response, indent=2)[:3000])
+                print(f"{'='*80}\n")
+            
             all_complete, statuses = self.check_statuses_complete(response)
             
             # Print every 5 attempts or when complete

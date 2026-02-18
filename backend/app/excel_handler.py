@@ -487,6 +487,7 @@ class ExcelHandler:
                 "Phone_No_Reachability",
                 "phone_no_reachability",
                 "phoneNoReachability",
+                "phone_noReachability",
                 "no_reachability",
                 "noReachability",
                 "reachability",
@@ -514,11 +515,19 @@ class ExcelHandler:
             if not _is_empty(val):
                 out[col] = val
         # Reverse pass: map raw Scoreplex keys to SL column when column still empty; prefer non-empty (do not fill with empty)
+        _REACHABILITY_KEYS = (
+            "no_reachability", "noreachability", "phone_reachability", "phone_no_reachability",
+            "phononoreachability", "reachability",
+        )
         for flat_key, flat_val in flat.items():
             if _is_empty(flat_val):
                 continue
             snake = _camel_to_snake(flat_key)
             snake_alt = _normalize_flat_key(flat_key)
+            # Explicit: any reachability-like key -> Phone_No_Reachability (Flask shows true/false)
+            if out.get("Phone_No_Reachability") in (None, ""):
+                if snake.lower() in _REACHABILITY_KEYS or snake_alt in _REACHABILITY_KEYS:
+                    out["Phone_No_Reachability"] = flat_val
             for col in DATA_COLUMNS_ORDER:
                 if _is_empty(out.get(col)):
                     col_norm = _normalize_flat_key(col)
@@ -528,6 +537,16 @@ class ExcelHandler:
                     if col.lower() == snake or col.lower() == snake_alt:
                         out[col] = flat_val
                         break
+        # Final fallback: Phone_No_Reachability from any flat key containing "reachability" (Scoreplex returns true/false)
+        if out.get("Phone_No_Reachability") in (None, ""):
+            for k, v in flat.items():
+                if _is_empty(v):
+                    continue
+                key_lower = (k or "").lower().replace("-", "_")
+                key_snake = _camel_to_snake(k).lower()
+                if "reachability" in key_lower or "reachability" in key_snake or "noreachability" in key_lower:
+                    out["Phone_No_Reachability"] = v
+                    break
         # email_mx_record_count = count of MX records when not provided
         mx_records = out.get("email_mx_records") or flat.get("email_mx_records") or _find_value_in_flat(flat, "email_mx_records")
         if out.get("email_mx_record_count") in (None, "") and mx_records is not None:
