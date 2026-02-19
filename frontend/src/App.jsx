@@ -62,7 +62,7 @@ function App() {
             'Content-Type': 'multipart/form-data',
           },
           responseType: 'blob',
-          timeout: 300000, // 5 minutes timeout
+          timeout: 1800000, // 30 minutes - backend processes rows sequentially (1 at a time), 25 rows can take 20+ min
         }
       );
 
@@ -86,14 +86,19 @@ function App() {
       setUploading(false);
     } catch (err) {
       let message = 'Upload failed. Please try again.';
-      const data = err.response?.data;
-      if (data?.detail) message = typeof data.detail === 'string' ? data.detail : data.detail;
-      else if (data instanceof Blob) {
-        try {
-          const text = await data.text();
-          const parsed = JSON.parse(text);
-          if (parsed.detail) message = typeof parsed.detail === 'string' ? parsed.detail : parsed.detail;
-        } catch (_) {}
+      const isTimeout = err.code === 'ECONNABORTED' || (err.message && err.message.toLowerCase().includes('timeout'));
+      if (isTimeout) {
+        message = 'Request timed out. With many rows the backend can take 20+ minutes. Try fewer rows or try again.';
+      } else {
+        const data = err.response?.data;
+        if (data?.detail) message = typeof data.detail === 'string' ? data.detail : data.detail;
+        else if (data instanceof Blob) {
+          try {
+            const text = await data.text();
+            const parsed = JSON.parse(text);
+            if (parsed.detail) message = typeof parsed.detail === 'string' ? parsed.detail : parsed.detail;
+          } catch (_) {}
+        }
       }
       setError(message);
       setUploading(false);

@@ -1,5 +1,6 @@
 import httpx
 import asyncio
+import time
 from typing import Optional, Dict, Any
 from app.config import settings
 
@@ -68,8 +69,8 @@ class ScoreplexClient:
                 payload["ip"] = ip
             if normalized_phone:
                 print(f"📱 Phone sent to API: {normalized_phone} (len={len(normalized_phone)}, expect 12 for India)")
-            # Auth: try API-Key header (same as GET); some Scoreplex setups use this for POST too
-            headers = {"API-Key": self.api_key, "Content-Type": "application/json"}
+            # Auth: Bearer for POST (match Flask - Scoreplex expects this for submit)
+            headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
             response = await self.client.post(
                 f"{self.base_url}/search",
                 params={"api_key": self.api_key, "report": "false"},
@@ -161,32 +162,38 @@ class ScoreplexClient:
     
     async def poll_until_ready(self, task_id: str) -> Optional[Dict[Any, Any]]:
         """
-        Poll until email, phone, and data_leak are COMPLETE
-        Max 60 attempts (3 minutes per row)
+        Poll until email, phone, and data_leak are COMPLETE.
+        Stops at MAX_POLL_ATTEMPTS or POLL_TIMEOUT_SECONDS (whichever first), like Flask.
         """
         print(f"🔄 Polling: {task_id[:12]}...")
-        
+        start_time = time.time()
+        response = None
+
         for attempt in range(1, settings.MAX_POLL_ATTEMPTS + 1):
             await asyncio.sleep(settings.POLL_INTERVAL)
-            
+
+            elapsed = time.time() - start_time
+            if elapsed >= settings.POLL_TIMEOUT_SECONDS:
+                print(f"  ⚠️ Timeout after {elapsed:.0f}s (POLL_TIMEOUT_SECONDS={settings.POLL_TIMEOUT_SECONDS})")
+                break
+
             response = await self.get_task_result(task_id)
             if not response:
                 if attempt % 10 == 1:
                     print(f"  ⚠️ Attempt {attempt}: No response from Scoreplex")
                 continue
-            
+
             all_complete, statuses = self.check_statuses_complete(response)
-            
-            # Print every 5 attempts or when complete
+
             if attempt % 5 == 1 or all_complete:
                 print(f"  Attempt {attempt}/{settings.MAX_POLL_ATTEMPTS}: {statuses}")
-            
+
             if all_complete:
                 print(f"  ✅ Complete after {attempt} attempts")
                 return response
-        
-        # Timeout - return last response anyway
-        print(f"  ⚠️ Timeout after {settings.MAX_POLL_ATTEMPTS} attempts")
+
+        if not response and attempt >= settings.MAX_POLL_ATTEMPTS:
+            print(f"  ⚠️ Timeout after {settings.MAX_POLL_ATTEMPTS} attempts")
         if response:
             _, final_statuses = self.check_statuses_complete(response)
             print(f"  Final: {final_statuses}")
