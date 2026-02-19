@@ -62,7 +62,7 @@ function App() {
             'Content-Type': 'multipart/form-data',
           },
           responseType: 'blob',
-          timeout: 3600000, // 60 minutes - ~30 min for 100 rows (sequential); leave headroom so upload doesn't fail
+          timeout: 21600000, // 6 hours - covers 500–1000+ rows (~2.5–5+ hrs); no need to change for bigger files
         }
       );
 
@@ -88,7 +88,7 @@ function App() {
       let message = 'Upload failed. Please try again.';
       const isTimeout = err.code === 'ECONNABORTED' || (err.message && err.message.toLowerCase().includes('timeout'));
       if (isTimeout) {
-        message = 'Request timed out. Large files can take 30+ minutes (e.g. 100 rows). Try fewer rows or try again.';
+        message = 'Request timed out. Very large files can take hours (e.g. 500+ rows). Try fewer rows or try again.';
       } else {
         const data = err.response?.data;
         if (data?.detail) message = typeof data.detail === 'string' ? data.detail : data.detail;
