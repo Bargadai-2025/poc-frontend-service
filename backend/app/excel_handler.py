@@ -83,7 +83,7 @@ STATUS_COLUMNS_AT_END = ["email_status", "data_leak_status", "phone_status", "re
     "sl_data_accounts",     # ✅ NEW
     "sl_data_addresses",    # ✅ NEW
     "sl_data_genders",      # ✅ NEW
-    "sl_data_birthdays",    # ✅ NEW]
+    "sl_data_birthdays",    # ✅ NEW
 ]
 
 def _format_list_plain(val: Any) -> str:
@@ -733,6 +733,7 @@ class ExcelHandler:
                 + list(STATUS_COLUMNS_AT_END)
             )
             ws.append(columns)
+            _NO_DASH_COLS = {"input_email", "input_phone", "task_id", "result_status", "result_err"}
 
             for result in results:
                 # Use only the email/phone we submitted for this row (never from API response)
@@ -756,7 +757,7 @@ class ExcelHandler:
                     except (TypeError, ValueError):
                         pass
                 row_data["email_mx_record_count"] = mx_count
-                                # ✅ Fix email_address_amount
+                # ✅ Fix email_address_amount
                 email_addr_val = row_data.get("email_addresses") or ""
                 if email_addr_val:
                     if isinstance(email_addr_val, list):
@@ -785,7 +786,11 @@ class ExcelHandler:
                 row_data["data_leak_status"] = row_data.get("data_leak_status", "")
                 row_data["result_status"] = result.get("status", "")
                 row_data["result_err"] = result.get("error", "")
-                row = [row_data.get(col, "") for col in columns]
+                row = [
+                    row_data.get(col, "") if col in _NO_DASH_COLS
+                    else ("-" if row_data.get(col, "") in (None, "", [], "None") else row_data.get(col, ""))
+                    for col in columns
+                ]
                 ws.append(row)
 
             wb.save(output_path)
@@ -807,6 +812,7 @@ class ExcelHandler:
                 + list(STATUS_COLUMNS_AT_END)
             )
             ws.append(columns)
+            _NO_DASH_COLS = {"input_email", "input_phone", "task_id", "result_status", "result_err"}
             for result in results:
                 submitted_email = result.get("email", "")
                 submitted_phone = _normalize_phone_91(result.get("phone", ""))
@@ -828,7 +834,7 @@ class ExcelHandler:
                     except (TypeError, ValueError):
                         pass
                 row_data["email_mx_record_count"] = mx_count
-                                # ✅ Fix email_address_amount
+                # ✅ Fix email_address_amount
                 email_addr_val = row_data.get("email_addresses") or ""
                 if email_addr_val:
                     if isinstance(email_addr_val, list):
@@ -856,7 +862,11 @@ class ExcelHandler:
                 row_data["data_leak_status"] = row_data.get("data_leak_status", "")
                 row_data["result_status"] = result.get("status", "")
                 row_data["result_err"] = result.get("error", "")
-                row = [row_data.get(col, "") for col in columns]
+                row = [
+                    row_data.get(col, "") if col in _NO_DASH_COLS
+                    else ("-" if row_data.get(col, "") in (None, "", [], "None") else row_data.get(col, ""))
+                    for col in columns
+                ]
                 ws.append(row)
             buffer = BytesIO()
             wb.save(buffer)
