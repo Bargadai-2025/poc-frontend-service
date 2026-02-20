@@ -23,12 +23,12 @@ class BulkProcessor:
             if total_rows == 0:
                 raise ValueError("No data rows found in Excel")
             
-            print(f"\n🚀 Processing {total_rows} rows...")
-            print(f"📊 Batch size: {self.batch_size}")
+            print(f"\n🚀 Processing {total_rows} rows...", flush=True)
+            print(f"📊 Batch size: {self.batch_size}", flush=True)
             
             total_batches = (total_rows + self.batch_size - 1) // self.batch_size
-            print(f"📊 Total batches: {total_batches}")
-            print(f"⏱️ Estimated time: {self._estimate_time(total_rows)}\n")
+            print(f"📊 Total batches: {total_batches}", flush=True)
+            print(f"⏱️ Estimated time: {self._estimate_time(total_rows)}\n", flush=True)
             
             # Step 2: Process in batches
             all_results = []
@@ -37,7 +37,7 @@ class BulkProcessor:
                 batch = rows[batch_num:batch_num + self.batch_size]
                 current_batch = (batch_num // self.batch_size) + 1
                 
-                print(f"🔄 Batch {current_batch}/{total_batches} ({len(batch)} rows) - Processing...")
+                print(f"🔄 Batch {current_batch}/{total_batches} ({len(batch)} rows) - Processing...", flush=True)
                 
                 # Process entire batch concurrently
                 tasks = [
@@ -56,10 +56,10 @@ class BulkProcessor:
                 success = sum(1 for r in batch_results if r.get("status") == "SUCCESS")
                 incomplete = sum(1 for r in batch_results if r.get("status") == "INCOMPLETE")
                 failed = sum(1 for r in batch_results if r.get("status") == "FAILED")
-                print(f"✅ Batch {current_batch} complete: {success} success, {incomplete} incomplete, {failed} failed\n")
+                print(f"✅ Batch {current_batch} complete: {success} success, {incomplete} incomplete, {failed} failed\n", flush=True)
             
             # Step 3: Build output Excel in memory (no file saved)
-            print("📝 Building result Excel...")
+            print("📝 Building result Excel...", flush=True)
             output_bytes = self.excel_handler.write_output_excel_to_bytes(all_results)
             
             # Step 4: Summary
@@ -74,16 +74,16 @@ class BulkProcessor:
                 "failed": failed_count,
             }
             
-            print(f"\n✅ Processing complete!")
-            print(f"   Total rows: {total_rows}")
-            print(f"   Successful (all 3 checks complete): {success_count}")
-            print(f"   Incomplete (timeout or pending): {incomplete_count}")
-            print(f"   Failed: {failed_count}")
+            print(f"\n✅ Processing complete!", flush=True)
+            print(f"   Total rows: {total_rows}", flush=True)
+            print(f"   Successful (all 3 checks complete): {success_count}", flush=True)
+            print(f"   Incomplete (timeout or pending): {incomplete_count}", flush=True)
+            print(f"   Failed: {failed_count}", flush=True)
             
             return summary, output_bytes
             
         except Exception as e:
-            print(f"❌ Processing failed: {str(e)}")
+            print(f"❌ Processing failed: {str(e)}", flush=True)
             raise
         finally:
             await self.client.close()

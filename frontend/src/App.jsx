@@ -1,13 +1,18 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react'; // ✅ added useRef
 import axios from 'axios';
 import './App.css';
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
 
 function App() {
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
+  const [progress, setProgress] = useState({ processed: 0, total: 0 }); // ✅ added
+  const pollingRef = useRef(null); // ✅ added
 
+  // ✅ UNCHANGED
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0];
     if (selectedFile) {
@@ -22,6 +27,7 @@ function App() {
     }
   };
 
+  // ✅ UNCHANGED
   const handleDrop = (e) => {
     e.preventDefault();
     const droppedFile = e.dataTransfer.files[0];
@@ -36,10 +42,12 @@ function App() {
     }
   };
 
+  // ✅ UNCHANGED
   const handleDragOver = (e) => {
     e.preventDefault();
   };
 
+  // ✅ CHANGED: now uses background job polling instead of waiting
   const handleUpload = async () => {
     if (!file) {
       setError('Please select a file first');
@@ -49,46 +57,65 @@ function App() {
     setUploading(true);
     setError(null);
     setResult(null);
+    setProgress({ processed: 0, total: 0 });
 
     const formData = new FormData();
     formData.append('file', file);
 
     try {
-      const response = await axios.post(
-        `${import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'}/api/process-excel`,
-        formData,
-        {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
-          responseType: 'blob',
-          timeout: 21600000, // 6 hours - covers 500–1000+ rows (~2.5–5+ hrs); no need to change for bigger files
-        }
-      );
-
-      // API returns the Excel file as body; summary is in headers (backend must send Access-Control-Expose-Headers for these)
-      const h = response.headers || {};
-      const getHeader = (name) => h[name] ?? h[name.toLowerCase()] ?? '';
-      const summary = {
-        total_rows: parseInt(getHeader('x-total-rows') || getHeader('X-Total-Rows') || '0', 10),
-        success: parseInt(getHeader('x-success-count') || getHeader('X-Success-Count') || '0', 10),
-        incomplete: parseInt(getHeader('x-incomplete-count') || getHeader('X-Incomplete-Count') || '0', 10),
-        failed: parseInt(getHeader('x-failed-count') || getHeader('X-Failed-Count') || '0', 10),
-      };
-      const resultFilename = (file?.name && file.name.endsWith('.xlsx'))
-        ? `${file.name.replace(/\.xlsx$/i, '')}_result.xlsx`
-        : 'fraud_detection_result.xlsx';
-      setResult({
-        summary,
-        resultBlob: response.data,
-        resultFilename,
+      // Step 1: Upload → get job_id instantly (no long wait)
+      const uploadRes = await axios.post(`${API_BASE}/api/process-excel`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
       });
-      setUploading(false);
+      const { job_id } = uploadRes.data;
+
+      // Step 2: Poll every 10 seconds for status
+      pollingRef.current = setInterval(async () => {
+        try {
+          const statusRes = await axios.get(`${API_BASE}/api/jobs/${job_id}`);
+          const data = statusRes.data;
+
+          setProgress({ processed: data.processed || 0, total: data.total || 0 });
+
+          if (data.status === 'done') {
+            clearInterval(pollingRef.current);
+
+            // Step 3: Download result Excel
+            const downloadRes = await axios.get(
+              `${API_BASE}/api/jobs/${job_id}/download`,
+              { responseType: 'blob' }
+            );
+
+            const summary = {
+              total_rows: data.total_rows || 0,
+              success: data.success || 0,
+              incomplete: data.incomplete || 0,
+              failed: data.failed || 0,
+            };
+
+            const resultFilename = (file?.name && file.name.endsWith('.xlsx'))
+              ? `${file.name.replace(/\.xlsx$/i, '')}_result.xlsx`
+              : 'fraud_detection_result.xlsx';
+
+            setResult({ summary, resultBlob: downloadRes.data, resultFilename });
+            setUploading(false);
+
+          } else if (data.status === 'failed') {
+            clearInterval(pollingRef.current);
+            setError(data.error || 'Processing failed. Please try again.');
+            setUploading(false);
+          }
+        } catch (pollErr) {
+          console.error('Polling error:', pollErr);
+          // Don't stop polling on a single network hiccup
+        }
+      }, 10000); // poll every 10 seconds
+
     } catch (err) {
       let message = 'Upload failed. Please try again.';
       const isTimeout = err.code === 'ECONNABORTED' || (err.message && err.message.toLowerCase().includes('timeout'));
       if (isTimeout) {
-        message = 'Request timed out. Very large files can take hours (e.g. 500+ rows). Try fewer rows or try again.';
+        message = 'Request timed out. Please try again.';
       } else {
         const data = err.response?.data;
         if (data?.detail) message = typeof data.detail === 'string' ? data.detail : data.detail;
@@ -105,6 +132,7 @@ function App() {
     }
   };
 
+  // ✅ UNCHANGED
   const handleDownload = () => {
     if (result?.resultBlob) {
       const url = URL.createObjectURL(result.resultBlob);
@@ -116,10 +144,13 @@ function App() {
     }
   };
 
+  // ✅ CHANGED: also clears polling interval on reset
   const handleReset = () => {
+    if (pollingRef.current) clearInterval(pollingRef.current);
     setFile(null);
     setResult(null);
     setError(null);
+    setProgress({ processed: 0, total: 0 });
   };
 
   return (
@@ -144,7 +175,7 @@ function App() {
                 onChange={handleFileChange}
                 style={{ display: 'none' }}
               />
-              
+
               {!file ? (
                 <label htmlFor="file-input" className="upload-label">
                   <div className="upload-icon">📄</div>
@@ -176,19 +207,27 @@ function App() {
               </button>
             )}
 
+            {/* ✅ CHANGED: shows live progress row count */}
             {uploading && (
               <div className="processing">
                 <div className="spinner"></div>
                 <p className="processing-text">Processing your file...</p>
-                <p className="processing-subtext">This may take a few moments</p>
+                {progress.total > 0 ? (
+                  <p className="processing-subtext">
+                    Processed {progress.processed} / {progress.total} rows...
+                  </p>
+                ) : (
+                  <p className="processing-subtext">This may take a few minutes</p>
+                )}
               </div>
             )}
           </div>
         ) : (
+          // ✅ UNCHANGED: result section exactly as before
           <div className="result-section">
             <div className="success-icon">✅</div>
             <h2>Processing Complete!</h2>
-            
+
             <div className="stats">
               <div className="stat-card">
                 <div className="stat-number">{result.summary.total_rows}</div>

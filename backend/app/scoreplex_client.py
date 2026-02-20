@@ -68,7 +68,7 @@ class ScoreplexClient:
             if ip:
                 payload["ip"] = ip
             if normalized_phone:
-                print(f"📱 Phone sent to API: {normalized_phone} (len={len(normalized_phone)}, expect 12 for India)")
+                print(f"📱 Phone sent to API: {normalized_phone} (len={len(normalized_phone)}, expect 12 for India)", flush=True)
             # Auth: Bearer for POST (match Flask - Scoreplex expects this for submit)
             headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
             response = await self.client.post(
@@ -78,19 +78,19 @@ class ScoreplexClient:
                 json=payload
             )
             
-            print(f"📡 Submit response: {response.status_code}")
+            print(f"📡 Submit response: {response.status_code}", flush=True)
             
             if response.status_code == 202:
                 data = response.json()
                 task_id = data.get("id")
-                print(f"✅ Task created: {task_id[:12]}...")
+                print(f"✅ Task created: {task_id[:12]}...", flush=True)
                 return task_id
             else:
-                print(f"❌ Submit failed: {response.status_code} - {response.text[:100]}")
+                print(f"❌ Submit failed: {response.status_code} - {response.text[:100]}", flush=True)
                 return None
                 
         except Exception as e:
-            print(f"❌ Submit error: {str(e)}")
+            print(f"❌ Submit error: {str(e)}", flush=True)
             return None
     
     async def get_task_result(self, task_id: str) -> Optional[Dict[Any, Any]]:
@@ -165,7 +165,7 @@ class ScoreplexClient:
         Poll until email, phone, and data_leak are COMPLETE.
         Stops at MAX_POLL_ATTEMPTS or POLL_TIMEOUT_SECONDS (whichever first), like Flask.
         """
-        print(f"🔄 Polling: {task_id[:12]}...")
+        print(f"🔄 Polling: {task_id[:12]}...", flush=True)
         start_time = time.time()
         response = None
 
@@ -174,36 +174,36 @@ class ScoreplexClient:
 
             elapsed = time.time() - start_time
             if elapsed >= settings.POLL_TIMEOUT_SECONDS:
-                print(f"  ⚠️ Timeout after {elapsed:.0f}s (POLL_TIMEOUT_SECONDS={settings.POLL_TIMEOUT_SECONDS})")
+                print(f"  ⚠️ Timeout after {elapsed:.0f}s (POLL_TIMEOUT_SECONDS={settings.POLL_TIMEOUT_SECONDS})", flush=True)
                 break
 
             response = await self.get_task_result(task_id)
             if not response:
                 if attempt % 10 == 1:
-                    print(f"  ⚠️ Attempt {attempt}: No response from Scoreplex")
+                    print(f"  ⚠️ Attempt {attempt}: No response from Scoreplex", flush=True)
                 continue
 
             all_complete, statuses = self.check_statuses_complete(response)
 
             if attempt % 5 == 1 or all_complete:
-                print(f"  Attempt {attempt}/{settings.MAX_POLL_ATTEMPTS}: {statuses}")
+                print(f"  Attempt {attempt}/{settings.MAX_POLL_ATTEMPTS}: {statuses}", flush=True)
 
             if all_complete:
-                print(f"  ✅ Complete after {attempt} attempts")
+                print(f"  ✅ Complete after {attempt} attempts", flush=True)
                 return response
 
         if not response and attempt >= settings.MAX_POLL_ATTEMPTS:
-            print(f"  ⚠️ Timeout after {settings.MAX_POLL_ATTEMPTS} attempts")
+            print(f"  ⚠️ Timeout after {settings.MAX_POLL_ATTEMPTS} attempts", flush=True)
         if response:
             _, final_statuses = self.check_statuses_complete(response)
-            print(f"  Final: {final_statuses}")
+            print(f"  Final: {final_statuses}", flush=True)
         return response
     
     async def process_row(self, email: str, phone: str, ip: Optional[str] = None) -> Dict[Any, Any]:
         """
         Process one row: submit → poll → return response
         """
-        print(f"\n🔹 Processing: {email} / {phone}")
+        print(f"\n🔹 Processing: {email} / {phone}", flush=True)
         
         task_id = await self.submit_search(email, phone, ip)
         
@@ -229,7 +229,7 @@ class ScoreplexClient:
         # Only SUCCESS when all 3 statuses (email, phone, data_leak) are complete
         all_complete, statuses = self.check_statuses_complete(result)
         if not all_complete:
-            print(f"  ⚠️ Row incomplete (timeout or pending): {email} - {statuses}")
+            print(f"  ⚠️ Row incomplete (timeout or pending): {email} - {statuses}", flush=True)
             return {
                 "status": "INCOMPLETE",
                 "error": "Timeout or not all checks complete (email, phone, data_leak)",
@@ -239,7 +239,7 @@ class ScoreplexClient:
                 "raw_response": result
             }
         
-        print(f"  ✅ Row complete: {email}")
+        print(f"  ✅ Row complete: {email}", flush=True)
         return {
             "status": "SUCCESS",
             "task_id": task_id,

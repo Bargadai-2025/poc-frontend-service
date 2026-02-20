@@ -7,9 +7,11 @@ from typing import List, Dict, Any
 # Application uses SL (Scoreplex) attribute names for fetching; output Excel uses same names as column headers.
 # Order after task_id = exact sequence below (from SL).
 DATA_COLUMNS_ORDER = [
+    "full_names",           # ✅ NEW
+    "full_names_number",
     "email_address_amount",
     "email_addresses",
-    "email_addresses_update",
+    # "email_addresses_update",
     "phone_numbers_amount",
     "phone_numbers_list",
     "phone_numbers_list_update",
@@ -74,8 +76,15 @@ DATA_COLUMNS_ORDER = [
     "phone_data_leaks_last_seen",
 ]
 # Order: email_status, data_leak_status, phone_status, then result_status and result_err
-STATUS_COLUMNS_AT_END = ["email_status", "data_leak_status", "phone_status", "result_status", "result_err"]
-
+STATUS_COLUMNS_AT_END = ["email_status", "data_leak_status", "phone_status", "result_status", "result_err", "sl_data_phones",       # ✅ NEW
+    "sl_data_emails",       # ✅ NEW
+    "sl_data_full_names",   # ✅ NEW
+    "sl_data_aliases",      # ✅ NEW
+    "sl_data_accounts",     # ✅ NEW
+    "sl_data_addresses",    # ✅ NEW
+    "sl_data_genders",      # ✅ NEW
+    "sl_data_birthdays",    # ✅ NEW]
+]
 
 def _format_list_plain(val: Any) -> str:
     """Format list/JSON array as plain comma-separated (no brackets, no double quotes)."""
@@ -492,11 +501,11 @@ class ExcelHandler:
                     "ip": ip_val
                 })
             
-            print(f"✅ Read {len(rows)} rows from Excel (excluding header)")
+            print(f"✅ Read {len(rows)} rows from Excel (excluding header)", flush=True)
             return rows
             
         except Exception as e:
-            print(f"❌ Error reading Excel: {str(e)}")
+            print(f"❌ Error reading Excel: {str(e)}", flush=True)
             raise
     
     @staticmethod
@@ -645,6 +654,24 @@ class ExcelHandler:
                         out["email_mx_record_count"] = len([x for x in s.split(",") if x.strip()])
                 else:
                     out["email_mx_record_count"] = mx_records
+
+                            # ✅ Fix email_address_amount = count of email_addresses
+        email_addrs = out.get("email_addresses") or flat.get("email_addresses") or _find_value_in_flat(flat, "email_addresses")
+        if email_addrs is not None:
+            if isinstance(email_addrs, list):
+                out["email_address_amount"] = len(email_addrs)
+            elif isinstance(email_addrs, str):
+                s = email_addrs.strip()
+                if not s:
+                    out["email_address_amount"] = 0
+                elif s.startswith("["):
+                    try:
+                        out["email_address_amount"] = len(json.loads(s))
+                    except Exception:
+                        out["email_address_amount"] = len([x for x in s.split(",") if x.strip()])
+                else:
+                    out["email_address_amount"] = len([x for x in s.split(",") if x.strip()])
+
         # Special formatting: *_update = list without brackets/quotes
         email_addrs = out.get("email_addresses") or flat.get("email_addresses") or _find_value_in_flat(flat, "email_addresses")
         out["email_addresses_update"] = _format_list_plain(email_addrs) if email_addrs is not None else out.get("email_addresses_update", "")
@@ -680,6 +707,16 @@ class ExcelHandler:
                 val = _get_status_from_data(flat, key_list)
             if val is not None:
                 out[status_key] = val
+
+        _SL_DATA_COLS = [
+            "sl_data_phones", "sl_data_emails", "sl_data_full_names",
+            "sl_data_aliases", "sl_data_accounts", "sl_data_addresses",
+            "sl_data_genders", "sl_data_birthdays",
+        ]
+        for sl_col in _SL_DATA_COLS:
+            val = flat.get(sl_col) or report.get(sl_col)
+            if val is not None:
+                out[sl_col] = val    
         return out
     
     @staticmethod
@@ -719,6 +756,21 @@ class ExcelHandler:
                     except (TypeError, ValueError):
                         pass
                 row_data["email_mx_record_count"] = mx_count
+                                # ✅ Fix email_address_amount
+                email_addr_val = row_data.get("email_addresses") or ""
+                if email_addr_val:
+                    if isinstance(email_addr_val, list):
+                        row_data["email_address_amount"] = len(email_addr_val)
+                    else:
+                        s = str(email_addr_val).strip()
+                        if s.startswith("["):
+                            try:
+                                row_data["email_address_amount"] = len(json.loads(s))
+                            except Exception:
+                                row_data["email_address_amount"] = len([x for x in s.split(",") if x.strip()])
+                        else:
+                            row_data["email_address_amount"] = len([x for x in s.split(",") if x.strip()])
+
                 _sl_calc = _flask_email_string_length(row_data.get("email_account_length"), row_data.get("email_account_digit_count"))
                 row_data["email_string_length"] = _sl_calc if _sl_calc != "" else row_data.get("email_string_length", "")
                 row_data["Phone_No_Reachability"] = _flask_phone_reachability(row_data.get("phone_valid"), row_data.get("phone_active"))
@@ -737,9 +789,9 @@ class ExcelHandler:
                 ws.append(row)
 
             wb.save(output_path)
-            print(f"✅ Wrote {len(results)} rows to {output_path}")
+            print(f"✅ Wrote {len(results)} rows to {output_path}", flush=True)
         except Exception as e:
-            print(f"❌ Error writing Excel: {str(e)}")
+            print(f"❌ Error writing Excel: {str(e)}", flush=True)
             raise
 
     @staticmethod
@@ -776,6 +828,21 @@ class ExcelHandler:
                     except (TypeError, ValueError):
                         pass
                 row_data["email_mx_record_count"] = mx_count
+                                # ✅ Fix email_address_amount
+                email_addr_val = row_data.get("email_addresses") or ""
+                if email_addr_val:
+                    if isinstance(email_addr_val, list):
+                        row_data["email_address_amount"] = len(email_addr_val)
+                    else:
+                        s = str(email_addr_val).strip()
+                        if s.startswith("["):
+                            try:
+                                row_data["email_address_amount"] = len(json.loads(s))
+                            except Exception:
+                                row_data["email_address_amount"] = len([x for x in s.split(",") if x.strip()])
+                        else:
+                            row_data["email_address_amount"] = len([x for x in s.split(",") if x.strip()])
+
                 _sl_calc = _flask_email_string_length(row_data.get("email_account_length"), row_data.get("email_account_digit_count"))
                 row_data["email_string_length"] = _sl_calc if _sl_calc != "" else row_data.get("email_string_length", "")
                 row_data["Phone_No_Reachability"] = _flask_phone_reachability(row_data.get("phone_valid"), row_data.get("phone_active"))
@@ -793,8 +860,8 @@ class ExcelHandler:
                 ws.append(row)
             buffer = BytesIO()
             wb.save(buffer)
-            print(f"✅ Built result Excel in memory ({len(results)} rows)")
+            print(f"✅ Built result Excel in memory ({len(results)} rows)", flush=True)
             return buffer.getvalue()
         except Exception as e:
-            print(f"❌ Error building Excel: {str(e)}")
+            print(f"❌ Error building Excel: {str(e)}", flush=True)
             raise
