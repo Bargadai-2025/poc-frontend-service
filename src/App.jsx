@@ -4,7 +4,7 @@ import "./App.css";
 import Navbar from "./components/navbar";
 import ServiceContextProvider from "./context/servicesProviderContext";
 // const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
-const API_BASE = "https://poc-backend-y.onrender.com/";
+const API_BASE = "https://poc-backend-y.onrender.com";
 
 function App() {
   const [file, setFile] = useState(null);
