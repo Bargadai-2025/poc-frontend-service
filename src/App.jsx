@@ -4,7 +4,7 @@ import "./App.css";
 import Navbar from "./components/navbar";
 import ServiceContextProvider from "./context/servicesProviderContext";
 // const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
-const API_BASE = "http://127.0.0.1:8000";
+const API_BASE = "https://poc-backend-y.onrender.com/";
 
 function App() {
   const [file, setFile] = useState(null);
@@ -13,7 +13,7 @@ function App() {
   const [error, setError] = useState(null);
   const [progress, setProgress] = useState({ processed: 0, total: 0 }); // ✅ added
   const pollingRef = useRef(null); // ✅ added
-  const {service} = useContext(ServiceContextProvider);
+  const { service } = useContext(ServiceContextProvider);
   // ✅ UNCHANGED
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0];
@@ -54,7 +54,7 @@ function App() {
   const handleDragOver = (e) => {
     e.preventDefault();
   };
-  
+
   // ✅ CHANGED: now uses background job polling instead of waiting
   const handleUpload = async () => {
     if (!file) {
@@ -69,7 +69,7 @@ function App() {
 
     const formData = new FormData();
     formData.append("file", file);
-    formData.append("service", service);   // 👈 important
+    formData.append("service", service); // 👈 important
 
     try {
       // Step 1: Upload → get job_id instantly (no long wait)
@@ -197,7 +197,6 @@ function App() {
     <div className="app">
       <Navbar />
       <div className="container">
-
         {!result ? (
           <div className="upload-section">
             <div
