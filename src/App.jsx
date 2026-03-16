@@ -3,8 +3,8 @@ import axios from "axios";
 import "./App.css";
 import Navbar from "./components/navbar";
 import ServiceContextProvider from "./context/servicesProviderContext";
-// const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
 const API_BASE = "https://poc-backend-y.onrender.com";
+// const API_BASE = "http://localhost:8000";
 
 function App() {
   const [file, setFile] = useState(null);
@@ -13,6 +13,7 @@ function App() {
   const [error, setError] = useState(null);
   const [progress, setProgress] = useState({ processed: 0, total: 0 }); // ✅ added
   const pollingRef = useRef(null); // ✅ added
+  // const[btndisable, setbtndisable]=useState(false);
   const { service } = useContext(ServiceContextProvider);
   // ✅ UNCHANGED
   const handleFileChange = (e) => {
@@ -164,7 +165,7 @@ function App() {
                 typeof parsed.detail === "string"
                   ? parsed.detail
                   : parsed.detail;
-          } catch (_) {}
+          } catch (_) { }
         }
       }
       setError(message);
@@ -236,7 +237,7 @@ function App() {
             {error && <div className="error-message">❌ {error}</div>}
 
             {file && !uploading && (
-              <button onClick={handleUpload} className="btn-primary">
+              <button onClick={handleUpload} className="btn-primary ">
                 🚀 Process Excel File
               </button>
             )}
